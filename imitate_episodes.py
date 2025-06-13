@@ -50,7 +50,16 @@ def main(args):
         from constants import SIM_TASK_CONFIGS
         task_config = SIM_TASK_CONFIGS[task_name]
     else:
-        from aloha_scripts.constants import TASK_CONFIGS
+        # TODO: fix real data task config
+        # from aloha_scripts.constants import TASK_CONFIGS
+        TASK_CONFIGS = {
+            'piper_pick_and_place':{
+                'dataset_dir': 'piper_pick_and_place',  # 相对于data_dir的路径
+                'episode_len': 50,
+                'camera_names': ['cam_right_wrist']
+                # 'camera_names': ['cam_high', 'cam_low', 'cam_left_wrist', 'cam_right_wrist']
+            },
+        }
         task_config = TASK_CONFIGS[task_name]
     dataset_dir = task_config['dataset_dir']
     num_episodes = task_config['num_episodes']
