@@ -33,13 +33,12 @@ class ACTPolicy(nn.Module):
         print(f'KL Weight {self.kl_weight}')
 
     def __call__(self, qpos, image, actions=None, is_pad=None):
-        """前向传播
-        
+        """
         Args:
-            qpos: 机器人关节位置, shape=(batch_size, 14)
+            qpos: 机器人关节位置, shape=(batch_size, state_dim)
             image: 相机图像, shape=(batch_size, num_cameras, C, H, W)
-            actions: 目标动作序列（训练时）, shape=(batch_size, episode_len, 14)
-            is_pad: 填充标记（训练时）, shape=(batch_size, episode_len)
+            actions: 目标动作序列（训练时）, shape=(batch_size, max_action_len, state_dim)
+            is_pad: 填充标记（训练时）, shape=(batch_size, max_action_len)
             
         Returns:
             训练时: 包含各种损失的字典
@@ -52,8 +51,8 @@ class ACTPolicy(nn.Module):
         image = normalize(image)
         if actions is not None: # training time
             # 只使用前num_queries个动作
-            actions = actions[:, :self.model.num_queries] # (batch_size, num_queries, action_dim)
-            is_pad = is_pad[:, :self.model.num_queries] # (batch_size, num_queries)
+            actions = actions[:, :self.model.num_queries]
+            is_pad = is_pad[:, :self.model.num_queries]
 
             # forward
             # a_hat: 预测的动作序列, shape=(batch_size, num_queries, action_dim)

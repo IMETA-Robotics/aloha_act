@@ -27,7 +27,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
     - 实现数据标准化
     """
     
-    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats):
+    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats, max_action_len):
         """初始化数据集参数
         
         Args:
@@ -41,8 +41,9 @@ class EpisodicDataset(torch.utils.data.Dataset):
         self.dataset_dir = dataset_dir
         self.camera_names = camera_names
         self.norm_stats = norm_stats
+        self.max_action_len = max_action_len  # 添加max_action_len属性
         self.is_sim = None
-        self.__getitem__(0)  # 初始化self.is_sim
+        self.__getitem__(0)
 
     def __len__(self):
         """返回数据集中的情节数量"""
@@ -63,7 +64,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
         episode_id = self.episode_ids[index]
         dataset_path = os.path.join(self.dataset_dir, f'episode_{episode_id}.hdf5')
         with h5py.File(dataset_path, 'r') as root:
-            is_sim = root.attrs['sim']
+            # is_sim = root.attrs['sim']
             original_action_shape = root['/action'].shape
             episode_len = original_action_shape[0]
             
@@ -74,34 +75,29 @@ class EpisodicDataset(torch.utils.data.Dataset):
                 # 随机选择起始点
                 start_ts = np.random.choice(episode_len)
                 
-            # 仅获取start_ts时刻的观察数据
-            qpos = root['/observations/qpos'][start_ts]
-            qvel = root['/observations/qvel'][start_ts] # 注意：这里提取了qvel但未使用
-            
-            # 仅获取start_ts时刻的相机图像
+           # get observation at start_ts only
+            qpos = root['/observation/state'][start_ts]
             image_dict = dict()
             for cam_name in self.camera_names:
-                image_dict[cam_name] = root[f'/observations/images/{cam_name}'][start_ts]
+                image_dict[cam_name] = root[f'/observation/images/{cam_name}'][start_ts]
                 
-            # 获取动作数据
-            if is_sim:
-                action = root['/action'][start_ts:]
-                action_len = episode_len - start_ts
-            else:
-                # TODO: 真实机器人数据从上一个时刻的action开始?
-                action = root['/action'][max(0, start_ts - 1):]
-                action_len = episode_len - max(0, start_ts - 1)
+            # get all actions after and including start_ts
+            # if is_sim:
+            #     action = root['/action'][start_ts:]
+            #     action_len = episode_len - start_ts
+            # else:
+            #     action = root['/action'][max(0, start_ts - 1):]
+            #     action_len = episode_len - max(0, start_ts - 1)
+            action = root['/action'][start_ts:]
+            action_len = episode_len - start_ts
 
-        self.is_sim = is_sim
-        
-        # 处理动作序列数据，添加填充
-        # 创建一个全零数组，大小与原始动作序列相同
-        padded_action = np.zeros(original_action_shape, dtype=np.float32)  # 形状(400, 14)
-        # 将实际动作数据复制到前action_len个时间步
-        padded_action[:action_len] = action  # 只填充有效部分，后面保持为0
-        # 创建padding掩码
-        is_pad = np.zeros(episode_len) # 全部初始化为0（表示有效数据）
-        is_pad[action_len:] = 1 # 将padding部分标记为1
+        # self.is_sim = is_sim
+        # 根据max_action_len初始化
+        padded_action = np.zeros((self.max_action_len, action.shape[1]), dtype=np.float32)
+        # 将实际动作数据填充到前action_len个时间步,后面保持为0
+        padded_action[:action_len] = action
+        is_pad = np.ones(self.max_action_len, dtype=bool)  # 初始化为全1（True）
+        is_pad[:action_len] = 0  # 前action_len个位置设置为0（False），表示非填充部分
 
         # 堆叠多个相机的图像
         all_cam_images = []
@@ -111,19 +107,18 @@ class EpisodicDataset(torch.utils.data.Dataset):
 
         # 转换为torch张量
         image_data = torch.from_numpy(all_cam_images) #（K, H, W, C)
-        qpos_data = torch.from_numpy(qpos).float() # (14,)
-        action_data = torch.from_numpy(padded_action).float() # (400, 14)
-        is_pad = torch.from_numpy(is_pad).bool() # (400,)
+        qpos_data = torch.from_numpy(qpos).float()
+        action_data = torch.from_numpy(padded_action).float()
+        is_pad = torch.from_numpy(is_pad).bool()
 
-        # 调整图像通道顺序（NCHW格式）
+        # channel last
         image_data = torch.einsum('k h w c -> k c h w', image_data)
 
-        # 数据标准化
-        image_data = image_data / 255.0  # 图像归一化
+        # normalize image and change dtype to float
+        image_data = image_data / 255.0
         action_data = (action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
         qpos_data = (qpos_data - self.norm_stats["qpos_mean"]) / self.norm_stats["qpos_std"]
 
-        
         return image_data, qpos_data, action_data, is_pad
 
 
@@ -148,9 +143,8 @@ def get_norm_stats(dataset_dir, num_episodes):
         
         # 使用h5py读取HDF5文件
         with h5py.File(dataset_path, 'r') as root:
-            # 提取qpos, qvel和action数据
-            qpos = root['/observations/qpos'][()]
-            qvel = root['/observations/qvel'][()]  # 注意：这里提取了qvel但未使用
+            # Assuming this is a numpy array
+            qpos = root['/observation/state'][()]
             action = root['/action'][()]
         
         # 将numpy数组转换为torch张量并添加到列表中
@@ -158,21 +152,43 @@ def get_norm_stats(dataset_dir, num_episodes):
         all_qpos_data.append(torch.from_numpy(qpos))
         all_action_data.append(torch.from_numpy(action))
     
+    # Pad all tensors to the maximum size
+    max_qpos_len = max(q.size(0) for q in all_qpos_data)
+    max_action_len = max(a.size(0) for a in all_action_data)
+    
+    padded_qpos = []
+    for qpos in all_qpos_data:
+        current_len = qpos.size(0)
+        if current_len < max_qpos_len:
+            # Pad with the last element
+            pad = qpos[-1:].repeat(max_qpos_len - current_len, 1)
+            qpos = torch.cat([qpos, pad], dim=0)
+        padded_qpos.append(qpos)
+        
+    padded_action = []
+    for action in all_action_data:
+        current_len = action.size(0)
+        if current_len < max_action_len:
+            # Pad with the last element
+            pad = action[-1:].repeat(max_action_len - current_len, 1)
+            action = torch.cat([action, pad], dim=0)
+        padded_action.append(action)
+    
     # 将所有episode的数据堆叠成一个大的张量
-    all_qpos_data = torch.stack(all_qpos_data)
-    all_action_data = torch.stack(all_action_data)
+    all_qpos_data = torch.stack(padded_qpos)
+    all_action_data = torch.stack(padded_action)
     
     # 计算action数据的均值和标准差
     action_mean = all_action_data.mean(dim=[0, 1], keepdim=True)
     action_std = all_action_data.std(dim=[0, 1], keepdim=True)
     # 将标准差的最小值限制在1e-2，以避免除以零的情况
-    action_std = torch.clip(action_std, 1e-2, np.inf)
+    action_std = torch.clip(action_std, 1e-2, np.inf)  # clipping
     
     # 计算qpos数据的均值和标准差
     qpos_mean = all_qpos_data.mean(dim=[0, 1], keepdim=True)
     qpos_std = all_qpos_data.std(dim=[0, 1], keepdim=True)
     # 同样限制qpos标准差的最小值
-    qpos_std = torch.clip(qpos_std, 1e-2, np.inf)
+    qpos_std = torch.clip(qpos_std, 1e-2, np.inf)  # clipping
     
     # 构建包含所有统计信息的字典
     stats = {
@@ -180,10 +196,10 @@ def get_norm_stats(dataset_dir, num_episodes):
         "action_std": action_std.numpy().squeeze(),
         "qpos_mean": qpos_mean.numpy().squeeze(),
         "qpos_std": qpos_std.numpy().squeeze(),
-        "example_qpos": qpos  # 保存一个qpos样例，可能用于后续处理
+        "example_qpos": qpos  # TODO:保存一个qpos样例，可能用于后续处理
     }
     
-    return stats
+    return stats, max_action_len
 
 
 def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val):
@@ -209,11 +225,11 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
     val_indices = shuffled_indices[int(train_ratio * num_episodes):]
 
     # 计算数据标准化统计信息
-    norm_stats = get_norm_stats(dataset_dir, num_episodes)
+    norm_stats, max_action_len = get_norm_stats(dataset_dir, num_episodes)
 
     # 构建数据集和数据加载器
-    train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats)
-    val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats)
+    train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats, max_action_len)
+    val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats, max_action_len)
     
     # 创建数据加载器，设置批处理和多进程加载
     # 如果想提高训练速度，可以考虑：

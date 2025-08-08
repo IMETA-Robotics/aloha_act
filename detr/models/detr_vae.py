@@ -77,10 +77,10 @@ class DETRVAE(nn.Module):
             # 使用视觉backbone的情况
             self.input_proj = nn.Conv2d(backbones[0].num_channels, hidden_dim, kernel_size=1) # 图像特征投影
             self.backbones = nn.ModuleList(backbones)
-            self.input_proj_robot_state = nn.Linear(14, hidden_dim)  # 关节位置投影
+            self.input_proj_robot_state = nn.Linear(state_dim, hidden_dim)  # 关节位置投影
         else:
             # 只使用状态信息的情况
-            self.input_proj_robot_state = nn.Linear(14, hidden_dim)  # 关节位置投影
+            self.input_proj_robot_state = nn.Linear(state_dim, hidden_dim)  # 关节位置投影
             self.input_proj_env_state = nn.Linear(7, hidden_dim)
             self.pos = torch.nn.Embedding(2, hidden_dim)
             self.backbones = None
@@ -88,8 +88,8 @@ class DETRVAE(nn.Module):
         # VAE编码器额外参数
         self.latent_dim = 32  # 隐变量z维度
         self.cls_embed = nn.Embedding(1, hidden_dim)  # CLS token嵌入
-        self.encoder_action_proj = nn.Linear(14, hidden_dim)  # 动作序列投影
-        self.encoder_joint_proj = nn.Linear(14, hidden_dim)   # 关节位置投影
+        self.encoder_action_proj = nn.Linear(state_dim, hidden_dim)  # 动作序列投影
+        self.encoder_joint_proj = nn.Linear(state_dim, hidden_dim)   # 关节位置投影
         self.latent_proj = nn.Linear(hidden_dim, self.latent_dim*2)  # 隐变量投影(均值和方差)
         # 位置编码表：CLS token + qpos + action序列
         self.register_buffer('pos_table', get_sinusoid_encoding_table(1+1+num_queries, hidden_dim))
@@ -101,10 +101,10 @@ class DETRVAE(nn.Module):
     def forward(self, qpos, image, env_state, actions=None, is_pad=None):
         """前向传播
         Args:
-            qpos: 机器人关节位置 [batch_size, 14]
+            qpos: 机器人关节位置 [batch_size, state_dim]
             image: 图像输入 [batch_size, num_cam, channel, height, width]
             env_state: 环境状态
-            actions: 动作序列 [batch_size, num_queries, 14]
+            actions: 动作序列 [batch_size, num_queries, state_dim]
             is_pad: padding掩码 [batch_size, num_queries]
         Returns:
             a_hat: 预测的动作
@@ -114,9 +114,9 @@ class DETRVAE(nn.Module):
         is_training = actions is not None
         bs, _ = qpos.shape
         
-        # 1.VAE前向传播
-        # training: 从动作序列获取隐变量z
+        # 1.VAE
         if is_training:
+            # training: 从动作序列获取隐变量z
             # 将动作序列投影到嵌入空间，并与CLS token拼接
             action_embed = self.encoder_action_proj(actions) # (batch_size, num_queries, hidden_dim)
             qpos_embed = self.encoder_joint_proj(qpos) # (batch_size, hidden_dim)
@@ -149,7 +149,7 @@ class DETRVAE(nn.Module):
             latent_sample = torch.zeros([bs, self.latent_dim], dtype=torch.float32).to(qpos.device)
             latent_input = self.latent_out_proj(latent_sample)
 
-        # 2.Transformer前向传播
+        # 2.Transformer
         # 使用视觉backbone的情况
         if self.backbones is not None:
             # 处理多相机图像特征
@@ -301,7 +301,7 @@ def build(args):
     Returns:
         DETR-VAE模型
     """
-    state_dim = 14 # TODO hardcode
+    state_dim = args.state_dim # TODO hardcode
     
     # From image
     backbones = []

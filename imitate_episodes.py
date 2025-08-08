@@ -47,27 +47,21 @@ def main(args):
     # 获取任务参数
     is_sim = task_name[:4] == 'sim_'
     if is_sim:
+        # simulation data
         from constants import SIM_TASK_CONFIGS
         task_config = SIM_TASK_CONFIGS[task_name]
     else:
-        # TODO: fix real data task config
-        # from aloha_scripts.constants import TASK_CONFIGS
-        TASK_CONFIGS = {
-            'piper_pick_and_place':{
-                'dataset_dir': 'piper_pick_and_place',  # 相对于data_dir的路径
-                'episode_len': 50,
-                'camera_names': ['cam_right_wrist']
-                # 'camera_names': ['cam_high', 'cam_low', 'cam_left_wrist', 'cam_right_wrist']
-            },
-        }
-        task_config = TASK_CONFIGS[task_name]
+        # real robot data
+        from constants import REAL_TASK_CONFIGS
+        task_config = REAL_TASK_CONFIGS[task_name]
+        
     dataset_dir = task_config['dataset_dir']
     num_episodes = task_config['num_episodes']
     episode_len = task_config['episode_len']
     camera_names = task_config['camera_names']
 
     # 固定参数
-    state_dim = 14  # 机器人关节状态的维度，joint position
+    state_dim = task_config["state_dim"]
     lr_backbone = 1e-5
     backbone = 'resnet18'
     if policy_class == 'ACT':
@@ -87,6 +81,7 @@ def main(args):
             'dec_layers': dec_layers,             # 解码器层数
             'nheads': nheads,                     # 注意力头数
             'camera_names': camera_names,         # 使用的相机名称列表
+            'state_dim': state_dim,
         }
     elif policy_class == 'CNNMLP':
         policy_config = {'lr': args['lr'], 'lr_backbone': lr_backbone, 'backbone' : backbone, 'num_queries': 1,
@@ -107,10 +102,10 @@ def main(args):
         'seed': args['seed'],
         'temporal_agg': args['temporal_agg'],
         'camera_names': camera_names,
-        'real_robot': not is_sim
+        'real_robot': not is_sim,
     }
 
-    # 评估
+    # Eval policy
     if is_eval:
         ckpt_names = [f'policy_best.ckpt']
         results = []
@@ -123,22 +118,22 @@ def main(args):
         print()
         exit()
 
-    # 训练
-    # 1. 创建数据加载器，而不是立即加载所有离线数据
+    # Trainning
+    # 1. create dataloader
     train_dataloader, val_dataloader, stats, _ = load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val)
 
-    # 2.保存数据集统计信息
+    # 2. save dataset stats
     if not os.path.isdir(ckpt_dir):
         os.makedirs(ckpt_dir)
     stats_path = os.path.join(ckpt_dir, f'dataset_stats.pkl')
     with open(stats_path, 'wb') as f:
         pickle.dump(stats, f)
 
-    # 3.训练模型
+    # 3.train model
     best_ckpt_info = train_bc(train_dataloader, val_dataloader, config)
     best_epoch, min_val_loss, best_state_dict = best_ckpt_info
 
-    # 4.保存最佳模型
+    # 4.save best checkpoint
     ckpt_path = os.path.join(ckpt_dir, f'policy_best.ckpt')
     torch.save(best_state_dict, ckpt_path)
     print(f'Best ckpt, val loss {min_val_loss:.6f} @ epoch{best_epoch}')
@@ -391,12 +386,16 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
 def forward_pass(data, policy):
     """
-    前向传播函数，用于训练和评估
+        Args:  
+            data: ['image_data', 'qpos_data', 'action_data', 'is_pad']
+                image_data shape: (batch_size, C, H, W)
+                qpos_data shape: (batch_size, state_dim)
+                action_data shape: (batch_size, max_action_len, state_dim)
+                is_pad shape: (batch_size, max_action_len)
+    
+        Returns:
+            loss: scalar
     """
-    # image_data: (batch_size, C, H, W)
-    # qpos_data: (batch_size, 14)
-    # action_data: (batch_size, episode_len, 14)
-    # is_pad: (batch_size, episode_len)
     image_data, qpos_data, action_data, is_pad = data
     image_data, qpos_data, action_data, is_pad = image_data.cuda(), qpos_data.cuda(), action_data.cuda(), is_pad.cuda()
     # policy: ACTPolicy or CNNMLPPolicy
@@ -404,9 +403,8 @@ def forward_pass(data, policy):
 
 
 def train_bc(train_dataloader, val_dataloader, config):
-    """
-    训练行为克隆策略
-    """
+    """train behavior clone policy."""
+    
     num_epochs = config['num_epochs']
     ckpt_dir = config['ckpt_dir']
     seed = config['seed']
@@ -471,7 +469,7 @@ def train_bc(train_dataloader, val_dataloader, config):
         print(summary_string)
 
         # 100个epoch保存一次
-        if epoch % 100 == 0:
+        if epoch % 500 == 0:
             ckpt_path = os.path.join(ckpt_dir, f'policy_epoch_{epoch}_seed_{seed}.ckpt')
             torch.save(policy.state_dict(), ckpt_path)
             plot_history(train_history, validation_history, epoch, ckpt_dir, seed)
