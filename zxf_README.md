@@ -16,7 +16,7 @@ pip install packaging
 pip install h5py
 pip install ipython
 
-cd act/detr && pip install -e .
+cd detr && pip install -e .
 
 ### Useages
 activate conda environment:

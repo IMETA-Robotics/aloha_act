@@ -14,15 +14,14 @@ from copy import deepcopy
 from tqdm import tqdm
 from einops import rearrange
 
-from constants import DT
-from constants import PUPPET_GRIPPER_JOINT_OPEN
+from task_config import DT
+from task_config import PUPPET_GRIPPER_JOINT_OPEN
 from utils import load_data # 数据加载函数
 from utils import sample_box_pose, sample_insertion_pose # 机器人相关函数
 from utils import compute_dict_mean, set_seed, detach_dict # 辅助函数
 from policy import ACTPolicy, CNNMLPPolicy
+from task_config import TASK_CONFIGS
 from visualize_episodes import save_videos
-
-from sim_env import BOX_POSE
 
 import IPython
 e = IPython.embed
@@ -45,29 +44,18 @@ def main(args):
     num_epochs = args['num_epochs']
 
     # 获取任务参数
-    is_sim = task_name[:4] == 'sim_'
-    if is_sim:
-        # simulation data
-        from constants import SIM_TASK_CONFIGS
-        task_config = SIM_TASK_CONFIGS[task_name]
-    else:
-        # real robot data
-        from constants import REAL_TASK_CONFIGS
-        task_config = REAL_TASK_CONFIGS[task_name]
-        
+    task_config = TASK_CONFIGS[task_name]
     dataset_dir = task_config['dataset_dir']
     num_episodes = task_config['num_episodes']
     episode_len = task_config['episode_len']
     camera_names = task_config['camera_names']
-
-    # 固定参数
     state_dim = task_config["state_dim"]
-    lr_backbone = 1e-5
-    backbone = 'resnet18'
+    # lr_backbone = 1e-5
+    # backbone = 'resnet18'
     if policy_class == 'ACT':
-        enc_layers = 4
-        dec_layers = 7
-        nheads = 8
+        # enc_layers = 4
+        # dec_layers = 7
+        # nheads = 8
         # 策略配置参数
         policy_config = {
             'lr': args['lr'],                     # 学习率
@@ -75,16 +63,16 @@ def main(args):
             'kl_weight': args['kl_weight'],       # KL散度权重,用于VAE训练
             'hidden_dim': args['hidden_dim'],     # 隐藏层维度
             'dim_feedforward': args['dim_feedforward'],  # 前馈网络维度
-            'lr_backbone': lr_backbone,           # 主干网络学习率
-            'backbone': backbone,                 # 主干网络类型
-            'enc_layers': enc_layers,             # 编码器层数
-            'dec_layers': dec_layers,             # 解码器层数
-            'nheads': nheads,                     # 注意力头数
+            'lr_backbone': args['lr_backbone'],           # 主干网络学习率
+            'backbone': args['backbone'],                 # 主干网络类型
+            'enc_layers': args['enc_layers'],             # 编码器层数
+            'dec_layers': args['dec_layers'],             # 解码器层数
+            'nheads': args['nheads'],                     # 注意力头数
             'camera_names': camera_names,         # 使用的相机名称列表
             'state_dim': state_dim,
         }
     elif policy_class == 'CNNMLP':
-        policy_config = {'lr': args['lr'], 'lr_backbone': lr_backbone, 'backbone' : backbone, 'num_queries': 1,
+        policy_config = {'lr': args['lr'], 'lr_backbone': args['lr_backbone'], 'backbone' : args['backbone'], 'num_queries': 1,
                          'camera_names': camera_names,}
     else:
         raise NotImplementedError
@@ -102,7 +90,6 @@ def main(args):
         'seed': args['seed'],
         'temporal_agg': args['temporal_agg'],
         'camera_names': camera_names,
-        'real_robot': not is_sim,
     }
 
     # Eval policy
@@ -349,9 +336,6 @@ def eval_bc(config, ckpt_name, save_episode=True):
                 rewards.append(ts.reward)
 
             plt.close()
-        if real_robot:
-            move_grippers([env.puppet_bot_left, env.puppet_bot_right], [PUPPET_GRIPPER_JOINT_OPEN] * 2, move_time=0.5)  # open
-            pass
 
         rewards = np.array(rewards)
         episode_return = np.sum(rewards[rewards!=None])
@@ -528,6 +512,8 @@ if __name__ == '__main__':
     parser.add_argument('--num_epochs', action='store', type=int, help='num_epochs', required=True)
     # 学习率
     parser.add_argument('--lr', action='store', type=float, help='lr', required=True)
+    # backbone的学习率
+    parser.add_argument('--lr_backbone', action='store', type=float, help='lr_backbone', default=4e-5, required=False)
 
     # for ACT policy
     # VAE中的KL权重
@@ -536,8 +522,13 @@ if __name__ == '__main__':
     parser.add_argument('--chunk_size', action='store', type=int, help='chunk_size', required=False)
     # transformer的encoder输入维度
     parser.add_argument('--hidden_dim', action='store', type=int, help='hidden_dim', required=False)
-    # transformer 前馈网络FFN的维度
+    # transformer 前馈网络FFN的维度get_image
     parser.add_argument('--dim_feedforward', action='store', type=int, help='dim_feedforward', required=False)
+    parser.add_argument('--enc_layers', action='store', type=int, help='enc_layers', default=4, required=False)
+    parser.add_argument('--dec_layers', action='store', type=int, help='dec_layers', default=7, required=False)
+    parser.add_argument('--nheads', action='store', type=int, help='nheads', default=8, required=False)
+    parser.add_argument('--backbone', action='store', type=str, help='backbone', default='resnet18', required=False)
+    
     # 时序聚合 
     parser.add_argument('--temporal_agg', action='store_true')
     

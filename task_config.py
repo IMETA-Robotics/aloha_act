@@ -1,58 +1,21 @@
 import pathlib
 
 ### Task parameters
-SIM_DATA_DIR = '/home/ubuntu/Documents/Embodiment_data/aloha'
-SIM_TASK_CONFIGS = {
-    'sim_transfer_cube_scripted':{
-        'dataset_dir': SIM_DATA_DIR + '/sim_transfer_cube_scripted',
-        'num_episodes': 50,
-        'episode_len': 400,
-        'camera_names': ['top'],
-        "state_dim": 14,
-    },
-
-    'sim_transfer_cube_human':{
-        'dataset_dir': SIM_DATA_DIR + '/sim_transfer_cube_human',
-        'num_episodes': 50,
-        'episode_len': 400,
-        'camera_names': ['top'],
-        "state_dim": 14,
-    },
-
-    'sim_insertion_scripted': {
-        'dataset_dir': SIM_DATA_DIR + '/sim_insertion_scripted',
-        'num_episodes': 50,
-        'episode_len': 400,
-        'camera_names': ['top'],
-        "state_dim": 14,
-    },
-
-    'sim_insertion_human': {
-        'dataset_dir': SIM_DATA_DIR + '/sim_insertion_human',
-        'num_episodes': 50,
-        'episode_len': 500,
-        'camera_names': ['top'],
-        "state_dim": 14,
-    },
-}
-
-REAL_DATA_DIR = "/home/ubuntu/IMETA_LAB/data_collection/data"
-REAL_TASK_CONFIGS = {
+DATA_DIR = "/home/ubuntu/IMETA_LAB/data_collection/data"
+TASK_CONFIGS = {
     'piper_pick_and_place':{
-        'dataset_dir': REAL_DATA_DIR + '/piper_place_and_place_0729',
+        'dataset_dir': DATA_DIR + '/piper_place_and_place_0729',
         'episode_len': 800,
         'num_episodes': 60,
         'camera_names': ['cam_right_wrist', "cam_front"],
         "state_dim": 7,
-        # 'camera_names': ['cam_high', 'cam_low', 'cam_left_wrist', 'cam_right_wrist']
     },
     'piper_pick_and_place_0805':{
-        'dataset_dir': REAL_DATA_DIR + '/piper_place_and_place_0805',
+        'dataset_dir': DATA_DIR + '/piper_place_and_place_0805',
         'episode_len': 800,
         'num_episodes': 99,
         'camera_names': ['cam_right_wrist', "cam_front"],
         "state_dim": 7,
-        # 'camera_names': ['cam_high', 'cam_low', 'cam_left_wrist', 'cam_right_wrist']
     },
 }
 

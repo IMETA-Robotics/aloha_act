@@ -81,10 +81,7 @@ class ACTPolicy(nn.Module):
 
 
 class CNNMLPPolicy(nn.Module):
-    """基于CNN+MLP的基线策略模型
-    
-    使用CNN处理图像，MLP处理状态和动作
-    """
+    """基于CNN+MLP的基线策略模型"""
     def __init__(self, args_override):
         """初始化CNNMLP策略模型
         
