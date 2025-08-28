@@ -17,6 +17,14 @@ TASK_CONFIGS = {
         'camera_names': ['cam_right_wrist', "cam_front"],
         "state_dim": 7,
     },
+    'y1_place_and_place_0827':{
+        'dataset_dir': DATA_DIR + '/y1_place_and_place_0827',
+        'episode_len': 300,
+        'num_episodes': 60,
+        'camera_names': ["cam_front"],
+        "state_dim": 7,
+    },
+    
 }
 
 ### Simulation envs fixed constants

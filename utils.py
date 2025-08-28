@@ -14,6 +14,7 @@ import torch
 import os
 import h5py
 from torch.utils.data import TensorDataset, DataLoader
+import cv2
 
 import IPython
 e = IPython.embed
@@ -79,7 +80,16 @@ class EpisodicDataset(torch.utils.data.Dataset):
             qpos = root['/observation/state'][start_ts]
             image_dict = dict()
             for cam_name in self.camera_names:
-                image_dict[cam_name] = root[f'/observation/images/{cam_name}'][start_ts]
+                # 获取二进制数据
+                jpeg_data = root[f'/observation/images/{cam_name}'][start_ts]
+                
+                # 将二进制数据转换为 numpy 数组
+                jpeg_array = np.frombuffer(jpeg_data, dtype=np.uint8)
+    
+                # 使用 cv2.imdecode 解码为 RGB 图像数组
+                image_rgb = cv2.imdecode(jpeg_array, cv2.IMREAD_COLOR)
+                
+                image_dict[cam_name] = image_rgb
                 
             # get all actions after and including start_ts
             # if is_sim:

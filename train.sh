@@ -1,5 +1,5 @@
 #!/bin/bash
-task_name="piper_pick_and_place_0805"
+task_name="y1_place_and_place_0827"
 gpu_id=0
 
 export CUDA_VISIBLE_DEVICES=${gpu_id}
@@ -11,8 +11,8 @@ python3 imitate_episodes.py \
     --kl_weight 10 \
     --chunk_size 50 \
     --hidden_dim 512 \
-    --batch_size 16 \
+    --batch_size 8 \
     --dim_feedforward 3200 \
-    --num_epochs 10000 \
-    --lr 2e-5 \
+    --num_epochs 6000 \
+    --lr 1e-5 \
     --seed 0
