@@ -5,6 +5,7 @@ from sensor_msgs.msg import Image
 import rospy
 import numpy as np
 import torch
+from typing import Union
 from task_config import TASK_CONFIGS
 
 class RealRobotEnv:
@@ -27,10 +28,10 @@ class RealRobotEnv:
     state_dim = self.task_config['state_dim']
     if state_dim == 7:
       # one arm, default right arm
-      rospy.Subscriber("/arm_joint_state",
+      rospy.Subscriber("/y1/arm_joint_state",
           ArmJointState, self.puppet_arm_right_callback, queue_size=1, tcp_nodelay=True)
       # control right arm
-      self.right_arm_joint_position_control_pub_ = rospy.Publisher('/joint_states', 
+      self.right_arm_joint_position_control_pub_ = rospy.Publisher('/y1/arm_joint_position_control', 
                                                                    ArmJointPositionControl, queue_size=1)
       
     elif state_dim == 14:
@@ -119,10 +120,10 @@ class RealRobotEnv:
     
     return observation
     
-  def step(self, action: list | np.ndarray | torch.Tensor):
+  def step(self, action: Union[list, np.ndarray, torch.Tensor]):
     joint_control_msg = ArmJointPositionControl()
     joint_control_msg.header.stamp = rospy.Time.now()
     joint_control_msg.arm_joint_position = action[0:6]
     joint_control_msg.gripper = action[6]
     
-    self.joint_position_control_pub_.publish(joint_control_msg)
+    self.right_arm_joint_position_control_pub_.publish(joint_control_msg)

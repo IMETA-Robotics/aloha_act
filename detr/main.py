@@ -69,7 +69,7 @@ def get_args_parser():
     parser.add_argument('--seed', action='store', type=int,               # 随机种子
                         help='seed', required=True)
     parser.add_argument('--num_epochs', action='store', type=int,         # 训练轮数
-                        help='num_epochs', required=True)
+                        help='num_epochs', required=False)
     parser.add_argument('--kl_weight', action='store', type=int,          # KL散度权重
                         help='KL Weight', required=False)
     parser.add_argument('--chunk_size', action='store', type=int,         # 动作序列分块大小
@@ -77,6 +77,9 @@ def get_args_parser():
     parser.add_argument('--temporal_agg', action='store_true')            # 是否使用时序聚合
     parser.add_argument('--state_dim', default=14, type=int,             
                         help="observation state dimmension")
+    parser.add_argument('--ckpt_name', action='store', type=str, help='ckpt_name', default='policy_best.ckpt', required=False)
+    parser.add_argument('--control_rate', action='store', type=int, help='publish_rate',
+                        default=50, required=False)
 
     return parser
 

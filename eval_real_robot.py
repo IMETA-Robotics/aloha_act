@@ -33,7 +33,7 @@ def make_policy(policy_class, policy_config):
     return policy
 
 def load_model(args):
-  set_seed(args.seed)
+  set_seed(args['seed'])
 
   # 获取任务参数
   task_name = args['task_name']
@@ -49,7 +49,7 @@ def load_model(args):
           'kl_weight': args['kl_weight'],       # KL散度权重,用于VAE训练
           'hidden_dim': args['hidden_dim'],     # 隐藏层维度
           'dim_feedforward': args['dim_feedforward'],  # 前馈网络维度
-          'lr_backbone': args['lr_backbone'],           # 主干网络学习率
+        #   'lr_backbone': args['lr_backbone'],           # 主干网络学习率
           'backbone': args['backbone'],                 # 主干网络类型
           'enc_layers': args['enc_layers'],             # 编码器层数
           'dec_layers': args['dec_layers'],             # 解码器层数
@@ -196,8 +196,8 @@ def model_inference(args, policy, env: RealRobotEnv):
 
 def init_arguments():
   parser = argparse.ArgumentParser()
+  parser.add_argument('--task_name', action='store', type=str, help='task_name', required=True)
   parser.add_argument('--ckpt_dir', action='store', type=str, help='ckpt_dir', required=True)
-  parser.add_argument('--task_name', action='store', type=str, help='task_name', default='aloha_mobile_dummy', required=False)
   parser.add_argument('--ckpt_name', action='store', type=str, help='ckpt_name', default='policy_best.ckpt', required=False)
   parser.add_argument('--policy_class', action='store', type=str, help='policy_class, capitalize', default='ACT', required=False)
   parser.add_argument('--seed', action='store', type=int, help='seed', default=0, required=False)
@@ -220,7 +220,9 @@ def init_arguments():
   # 时序聚合 
   parser.add_argument('--temporal_agg',  action='store', type=bool, help='temporal_agg', default=True, required=False)
   
-  args = parser.parse_args()
+  args = vars(parser.parse_args())
+  print(f"args: {args}")
+
   return args
   
 if __name__ == '__main__':
