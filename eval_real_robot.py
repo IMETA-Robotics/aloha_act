@@ -14,6 +14,7 @@ import time
 import rospy
 import numpy as np
 from einops import rearrange
+from collections import deque
 
 from policy import ACTPolicy, CNNMLPPolicy
 from utils import set_seed
@@ -75,6 +76,8 @@ def load_model(args):
   policy.cuda()
   policy.eval()
   print(f'Loaded: {ckpt_path}')
+
+  return policy
   
 def get_image(image_list: list):
     """
@@ -119,13 +122,17 @@ def model_inference(args, policy, env: RealRobotEnv):
       num_queries = args['chunk_size']
       # 保存历史的动作序列
       # TODO: 是否可以改为队列？
-      max_timesteps = 10000
-      all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, state_dim]).cuda()
+      # max_timesteps = 10000
+      # all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, state_dim]).cuda()
+
+      # 使用双端队列来存储历史预测的动作序列
+      # maxlen 参数自动管理队列大小，当队列满时，最老的元素会被自动移除
+      action_queue = deque(maxlen=num_queries) # maxlen 设置为预测序列的长度
       
   input("Please enter any key to start the subsequent program):")
   # TODO: robot go to init position
   print("wait robot to init pose")
-  init_position = [0, 0, 0, 0, 0, 0, 0]
+  init_position = [1.5, 0, 0, 0, 0, 0, 0]
   env.step(init_position)
   time.sleep(3)
   
@@ -142,7 +149,7 @@ def model_inference(args, policy, env: RealRobotEnv):
             continue
         
         ### process qpos and image_list
-        qpos = pre_process(observation['qpos'])
+        qpos = pre_process(observation['state'])
         qpos = torch.from_numpy(qpos).float().cuda().unsqueeze(0)
         
         curr_image = get_image(observation["images"]) # shape: (1, num_cameras, C, H, W)
@@ -152,26 +159,60 @@ def model_inference(args, policy, env: RealRobotEnv):
             # query_frequency间隔推理一次输出 动作快
             if t % query_frequency == 0:
                 all_actions = policy(qpos, curr_image)
+                # 将本次推理得到的整个动作序列（或其张量）加入队列
+                # 这里可以选择只存 CPU 张量以节省 GPU 内存，使用时再 .cuda()
+                action_queue.append(all_actions.cpu())
+                # print("test1")
             
             if temporal_agg:
-                # 将预测的动作序列存储到all_time_actions中
-                all_time_actions[[t], t:t+num_queries] = all_actions
-                # 获取当前时间步之前的所有预测动作
-                actions_for_curr_step = all_time_actions[:, t]
-                # 找出已经填充了动作的时间步
-                actions_populated = torch.all(actions_for_curr_step != 0, axis=1)  # shape: (max_timesteps,)
-                actions_for_curr_step = actions_for_curr_step[actions_populated]  # shape: (num_populated, 14)
+                # # 将预测的动作序列存储到all_time_actions中
+                # all_time_actions[[t], t:t+num_queries] = all_actions
+                # # 获取当前时间步之前的所有预测动作
+                # actions_for_curr_step = all_time_actions[:, t]
+                # # 找出已经填充了动作的时间步
+                # actions_populated = torch.all(actions_for_curr_step != 0, axis=1)  # shape: (max_timesteps,)
+                # actions_for_curr_step = actions_for_curr_step[actions_populated]  # shape: (num_populated, 14)
                 
-                # 计算指数衰减权重
-                # w_i = exp(-k * i) / sum(exp(-k * i))
-                # 这里的i是时间步索引，k是衰减率
-                k = 0.01  # 衰减率
-                exp_weights = np.exp(-k * np.arange(len(actions_for_curr_step)))
-                exp_weights = exp_weights / exp_weights.sum()  # 归一化权重
-                exp_weights = torch.from_numpy(exp_weights).cuda().unsqueeze(dim=1) # shape: (num_populated, 1)
+                # # 计算指数衰减权重
+                # # w_i = exp(-k * i) / sum(exp(-k * i))
+                # # 这里的i是时间步索引，k是衰减率
+                # k = 0.01  # 衰减率
+                # exp_weights = np.exp(-k * np.arange(len(actions_for_curr_step)))
+                # exp_weights = exp_weights / exp_weights.sum()  # 归一化权重
+                # exp_weights = torch.from_numpy(exp_weights).cuda().unsqueeze(dim=1) # shape: (num_populated, 1)
                 
-                # 使用加权平均计算最终动作
-                raw_action = (actions_for_curr_step * exp_weights).sum(dim=0, keepdim=True) # shape: (1, 14)
+                # # 使用加权平均计算最终动作
+                # raw_action = (actions_for_curr_step * exp_weights).sum(dim=0, keepdim=True) # shape: (1, 14)
+
+            
+                # 从队列中收集所有历史预测
+                # 队列中的每个元素都是一个完整的预测序列 (num_queries, action_dim)
+                actions_for_curr_step = []
+                # 计算每个历史预测在当前时间步 t 应该贡献哪个动作
+                # 例如，10步前的预测，其第10个动作对应当前t
+                for i, past_actions in enumerate(action_queue):
+                    past_actions = past_actions.cuda() # 移动到 GPU
+                    time_offset = len(action_queue) - 1 - i # 距离现在的时间步数
+                    if time_offset < past_actions.shape[1]: # 确保索引有效
+                        actions_for_curr_step.append(past_actions[0, time_offset]) # 取 batch 0, 对应时间步的动作
+                
+                if actions_for_curr_step:
+                    actions_for_curr_step = torch.stack(actions_for_curr_step) # shape: (num_history, action_dim)
+                    
+                    # 计算指数衰减权重 (权重数量等于队列中的历史预测数量)
+                    k = 0.01
+                    exp_weights = np.exp(-k * np.arange(len(actions_for_curr_step)))
+                    exp_weights = exp_weights / exp_weights.sum()
+                    exp_weights = torch.from_numpy(exp_weights).cuda().unsqueeze(dim=1)
+                    
+                    raw_action = (actions_for_curr_step * exp_weights).sum(dim=0, keepdim=True)
+                else:
+                    # 队列为空的边缘情况，通常不会发生
+                    # raw_action = torch.zeros(1, state_dim).cuda()
+                    print("action_queue is empty")
+                    rate.sleep()
+                    continue
+
             else:
                 # 如果不使用时间聚合，直接选择当前时间步对应的动作
                 raw_action = all_actions[:, t % query_frequency]
@@ -185,14 +226,14 @@ def model_inference(args, policy, env: RealRobotEnv):
         action = post_process(raw_action)
         target_qpos = action
 
-        ### step the environment
-        env.step(target_qpos)
-
         # 计算耗时
         end_time = time.time()
         print(f"inference time: {(end_time - start_time)*1000} ms")
         
         rate.sleep()
+        ### step the environment
+        env.step(target_qpos)
+        t += 1
 
 def init_arguments():
   parser = argparse.ArgumentParser()

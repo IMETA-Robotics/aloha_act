@@ -24,6 +24,13 @@ TASK_CONFIGS = {
         'camera_names': ["cam_front"],
         "state_dim": 7,
     },
+        'y1_place_and_place_0828':{
+        'dataset_dir': DATA_DIR + '/y1_place_and_place_0828',
+        'episode_len': 300,
+        'num_episodes': 159,
+        'camera_names': ["cam_front"],
+        "state_dim": 7,
+    },
     
 }
 

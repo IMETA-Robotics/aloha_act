@@ -102,7 +102,7 @@ class RealRobotEnv:
       print("not receive right arm data")
       return None
     else:
-      joint_state = np.array(self.puppet_arm_right_state.joint_position)
+      joint_state = np.array(self.right_puppet_arm_state.joint_position)
       observation["state"] = joint_state
       # observation["state"] = torch.from_numpy(joint_state).float()
       
