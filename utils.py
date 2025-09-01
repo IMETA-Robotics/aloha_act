@@ -23,7 +23,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
     """情节式数据集类，用于加载和预处理机器人轨迹数据
     
     特点：
-    - 支持按情节id加载数据
+    - 支持按episode id加载数据
     - 处理图像和状态数据
     - 实现数据标准化
     """
@@ -32,7 +32,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
         """初始化数据集参数
         
         Args:
-            episode_ids: 情节ID列表
+            episode_ids: episode ID列表
             dataset_dir: 数据集目录
             camera_names: 相机名称列表
             norm_stats: 标准化统计信息
@@ -43,7 +43,6 @@ class EpisodicDataset(torch.utils.data.Dataset):
         self.camera_names = camera_names
         self.norm_stats = norm_stats
         self.max_action_len = max_action_len  # 添加max_action_len属性
-        self.is_sim = None
         self.__getitem__(0)
 
     def __len__(self):
@@ -65,7 +64,6 @@ class EpisodicDataset(torch.utils.data.Dataset):
         episode_id = self.episode_ids[index]
         dataset_path = os.path.join(self.dataset_dir, f'episode_{episode_id}.hdf5')
         with h5py.File(dataset_path, 'r') as root:
-            # is_sim = root.attrs['sim']
             original_action_shape = root['/action'].shape
             episode_len = original_action_shape[0]
             
@@ -91,17 +89,9 @@ class EpisodicDataset(torch.utils.data.Dataset):
                 
                 image_dict[cam_name] = image_rgb
                 
-            # get all actions after and including start_ts
-            # if is_sim:
-            #     action = root['/action'][start_ts:]
-            #     action_len = episode_len - start_ts
-            # else:
-            #     action = root['/action'][max(0, start_ts - 1):]
-            #     action_len = episode_len - max(0, start_ts - 1)
             action = root['/action'][start_ts:]
             action_len = episode_len - start_ts
 
-        # self.is_sim = is_sim
         # 根据max_action_len初始化
         padded_action = np.zeros((self.max_action_len, action.shape[1]), dtype=np.float32)
         # 将实际动作数据填充到前action_len个时间步,后面保持为0
@@ -262,7 +252,7 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
         prefetch_factor=1
     )
 
-    return train_dataloader, val_dataloader, norm_stats, train_dataset.is_sim
+    return train_dataloader, val_dataloader, norm_stats
 
 
 ### 环境工具函数

@@ -1,7 +1,20 @@
 """
-模仿学习训练和评估脚本
+train your act model.
 
-该脚本用于训练和评估模仿学习算法,支持ACT和CNNMLP两种策略。
+example:
+  python3 train.py \
+    --task_name ${task_name} \
+    --ckpt_dir ./output/act_ckpt/act-${task_name}/ \
+    --policy_class ACT \
+    --kl_weight 10 \
+    --chunk_size 50 \
+    --hidden_dim 512 \
+    --batch_size 8 \
+    --dim_feedforward 3200 \
+    --num_epochs 6000 \
+    --lr 1e-5 \
+    --seed 0
+
 """
 
 import torch
@@ -14,10 +27,7 @@ from copy import deepcopy
 from tqdm import tqdm
 from einops import rearrange
 
-from task_config import DT
-from task_config import PUPPET_GRIPPER_JOINT_OPEN
 from utils import load_data # 数据加载函数
-from utils import sample_box_pose, sample_insertion_pose # 机器人相关函数
 from utils import compute_dict_mean, set_seed, detach_dict # 辅助函数
 from policy import ACTPolicy, CNNMLPPolicy
 from task_config import TASK_CONFIGS
@@ -33,10 +43,8 @@ def main(args):
     # 设置随机种子，确保结果可复现
     set_seed(1)
     # 解析命令行参数
-    is_eval = args['eval']
     ckpt_dir = args['ckpt_dir']
     policy_class = args['policy_class']
-    onscreen_render = args['onscreen_render']
     task_name = args['task_name']
     batch_size_train = args['batch_size']
     batch_size_val = args['batch_size']
@@ -49,12 +57,7 @@ def main(args):
     episode_len = task_config['episode_len']
     camera_names = task_config['camera_names']
     state_dim = task_config["state_dim"]
-    # lr_backbone = 1e-5
-    # backbone = 'resnet18'
     if policy_class == 'ACT':
-        # enc_layers = 4
-        # dec_layers = 7
-        # nheads = 8
         # 策略配置参数
         policy_config = {
             'lr': args['lr'],                     # 学习率
@@ -83,30 +86,15 @@ def main(args):
         'state_dim': state_dim,
         'lr': args['lr'],
         'policy_class': policy_class,
-        'onscreen_render': onscreen_render,
         'policy_config': policy_config,
         'task_name': task_name,
         'seed': args['seed'],
-        'temporal_agg': args['temporal_agg'],
         'camera_names': camera_names,
     }
 
-    # Eval policy
-    if is_eval:
-        ckpt_names = [f'policy_best.ckpt']
-        results = []
-        for ckpt_name in ckpt_names:
-            success_rate, avg_return = eval_bc(config, ckpt_name, save_episode=True)
-            results.append([ckpt_name, success_rate, avg_return])
-
-        for ckpt_name, success_rate, avg_return in results:
-            print(f'{ckpt_name}: {success_rate=} {avg_return=}')
-        print()
-        exit()
-
     # Trainning
     # 1. create dataloader
-    train_dataloader, val_dataloader, stats, _ = load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val)
+    train_dataloader, val_dataloader, stats = load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val)
 
     # 2. save dataset stats
     if not os.path.isdir(ckpt_dir):
@@ -296,10 +284,6 @@ def plot_history(train_history, validation_history, num_epochs, ckpt_dir, seed):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    # traning or evaluation
-    parser.add_argument('--eval', action='store_true')
-    # 是否在屏幕上显示渲染结果
-    parser.add_argument('--onscreen_render', action='store_true')
     # 保存ckpt的目录
     parser.add_argument('--ckpt_dir', action='store', type=str, help='ckpt_dir', required=True)
     # 策略类: act or cnnmlp
@@ -330,8 +314,5 @@ if __name__ == '__main__':
     parser.add_argument('--dec_layers', action='store', type=int, help='dec_layers', default=7, required=False)
     parser.add_argument('--nheads', action='store', type=int, help='nheads', default=8, required=False)
     parser.add_argument('--backbone', action='store', type=str, help='backbone', default='resnet18', required=False)
-    
-    # 时序聚合 
-    parser.add_argument('--temporal_agg', action='store_true')
     
     main(vars(parser.parse_args()))

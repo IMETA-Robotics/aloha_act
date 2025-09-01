@@ -4,7 +4,7 @@ gpu_id=0
 
 export CUDA_VISIBLE_DEVICES=${gpu_id}
 
-python3 imitate_episodes.py \
+python3 train.py \
     --task_name ${task_name} \
     --ckpt_dir ./output/act_ckpt/act-${task_name}/ \
     --policy_class ACT \

@@ -10,5 +10,5 @@ python3 eval_real_robot.py \
     --ckpt_name policy_epoch_8000_seed_0.ckpt \
     --policy_class ACT \
     --chunk_size 25 \
-    --control_rate 18 \
+    --control_rate 20 \
     --seed 0

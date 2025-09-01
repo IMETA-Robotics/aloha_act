@@ -2,7 +2,14 @@
 eval your tranined act model in real robot arm. 
 
 example:
-  python eval_real_robot.py
+  python3 eval_real_robot.py \
+    --task_name ${task_name} \
+    --ckpt_dir output/act_ckpt/act-${task_name}/ \
+    --ckpt_name policy_epoch_8000_seed_0.ckpt \
+    --policy_class ACT \
+    --chunk_size 25 \
+    --control_rate 18 \
+    --seed 0
 
 """
 
@@ -50,7 +57,6 @@ def load_model(args):
           'kl_weight': args['kl_weight'],       # KL散度权重,用于VAE训练
           'hidden_dim': args['hidden_dim'],     # 隐藏层维度
           'dim_feedforward': args['dim_feedforward'],  # 前馈网络维度
-        #   'lr_backbone': args['lr_backbone'],           # 主干网络学习率
           'backbone': args['backbone'],                 # 主干网络类型
           'enc_layers': args['enc_layers'],             # 编码器层数
           'dec_layers': args['dec_layers'],             # 解码器层数
@@ -59,7 +65,7 @@ def load_model(args):
           'state_dim': state_dim,
       }
   elif policy_class == 'CNNMLP':
-      policy_config = {'lr': args['lr'], 'lr_backbone': args['lr_backbone'], 'backbone' : args['backbone'], 'num_queries': 1,
+      policy_config = {'lr': args['lr'], 'backbone' : args['backbone'], 'num_queries': 1,
                         'camera_names': camera_names,}
   else:
       raise NotImplementedError
@@ -120,17 +126,13 @@ def model_inference(args, policy, env: RealRobotEnv):
       query_frequency = 1
       # 保存原始的查询数量
       num_queries = args['chunk_size']
-      # 保存历史的动作序列
-      # TODO: 是否可以改为队列？
-      # max_timesteps = 10000
-      # all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, state_dim]).cuda()
 
       # 使用双端队列来存储历史预测的动作序列
       # maxlen 参数自动管理队列大小，当队列满时，最老的元素会被自动移除
       action_queue = deque(maxlen=num_queries) # maxlen 设置为预测序列的长度
       
-  input("Please enter any key to start the subsequent program):")
-  # TODO: robot go to init position
+  input("Press key [enter] to start model inference: ")
+  # TODO: robot go to dataset init position
   print("wait robot to init pose")
   init_position = [1.5, 0, 0, 0, 0, 0, 0]
   env.step(init_position)
@@ -162,29 +164,9 @@ def model_inference(args, policy, env: RealRobotEnv):
                 # 将本次推理得到的整个动作序列（或其张量）加入队列
                 # 这里可以选择只存 CPU 张量以节省 GPU 内存，使用时再 .cuda()
                 action_queue.append(all_actions.cpu())
-                # print("test1")
+                print(f"all_actions.shape: {all_actions.shape}")
             
             if temporal_agg:
-                # # 将预测的动作序列存储到all_time_actions中
-                # all_time_actions[[t], t:t+num_queries] = all_actions
-                # # 获取当前时间步之前的所有预测动作
-                # actions_for_curr_step = all_time_actions[:, t]
-                # # 找出已经填充了动作的时间步
-                # actions_populated = torch.all(actions_for_curr_step != 0, axis=1)  # shape: (max_timesteps,)
-                # actions_for_curr_step = actions_for_curr_step[actions_populated]  # shape: (num_populated, 14)
-                
-                # # 计算指数衰减权重
-                # # w_i = exp(-k * i) / sum(exp(-k * i))
-                # # 这里的i是时间步索引，k是衰减率
-                # k = 0.01  # 衰减率
-                # exp_weights = np.exp(-k * np.arange(len(actions_for_curr_step)))
-                # exp_weights = exp_weights / exp_weights.sum()  # 归一化权重
-                # exp_weights = torch.from_numpy(exp_weights).cuda().unsqueeze(dim=1) # shape: (num_populated, 1)
-                
-                # # 使用加权平均计算最终动作
-                # raw_action = (actions_for_curr_step * exp_weights).sum(dim=0, keepdim=True) # shape: (1, 14)
-
-            
                 # 从队列中收集所有历史预测
                 # 队列中的每个元素都是一个完整的预测序列 (num_queries, action_dim)
                 actions_for_curr_step = []
@@ -208,13 +190,13 @@ def model_inference(args, policy, env: RealRobotEnv):
                     raw_action = (actions_for_curr_step * exp_weights).sum(dim=0, keepdim=True)
                 else:
                     # 队列为空的边缘情况，通常不会发生
-                    # raw_action = torch.zeros(1, state_dim).cuda()
                     print("action_queue is empty")
                     rate.sleep()
                     continue
 
             else:
                 # 如果不使用时间聚合，直接选择当前时间步对应的动作
+                print(f"all_actions.shape: {all_actions.shape}")
                 raw_action = all_actions[:, t % query_frequency]
         elif args['policy_class'] == "CNNMLP":
             raw_action = policy(qpos, curr_image)
@@ -227,8 +209,10 @@ def model_inference(args, policy, env: RealRobotEnv):
         target_qpos = action
 
         # 计算耗时
-        end_time = time.time()
-        print(f"inference time: {(end_time - start_time)*1000} ms")
+        inference_time = (time.time() - start_time) * 1000
+        # print(f"inference time: {inference_time} ms")
+        if inference_time > 50 :
+            print(f"delay inference time: {inference_time} ms")
         
         rate.sleep()
         ### step the environment
