@@ -15,13 +15,14 @@ import rospy
 import numpy as np
 from einops import rearrange
 from collections import deque
+import matplotlib.pyplot as plt
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import h5py
 import cv2
 
 from policy import ACTPolicy, CNNMLPPolicy
 from utils import set_seed
 from task_config import TASK_CONFIGS
-from real_robot_env import RealRobotEnv
 
 def make_policy(policy_class, policy_config):
     """
@@ -52,7 +53,6 @@ def load_model(args):
           'kl_weight': args['kl_weight'],       # KL散度权重,用于VAE训练
           'hidden_dim': args['hidden_dim'],     # 隐藏层维度
           'dim_feedforward': args['dim_feedforward'],  # 前馈网络维度
-        #   'lr_backbone': args['lr_backbone'],           # 主干网络学习率
           'backbone': args['backbone'],                 # 主干网络类型
           'enc_layers': args['enc_layers'],             # 编码器层数
           'dec_layers': args['dec_layers'],             # 解码器层数
@@ -61,7 +61,7 @@ def load_model(args):
           'state_dim': state_dim,
       }
   elif policy_class == 'CNNMLP':
-      policy_config = {'lr': args['lr'], 'lr_backbone': args['lr_backbone'], 'backbone' : args['backbone'], 'num_queries': 1,
+      policy_config = {'lr': args['lr'], 'backbone' : args['backbone'], 'num_queries': 1,
                         'camera_names': camera_names,}
   else:
       raise NotImplementedError
@@ -78,6 +78,8 @@ def load_model(args):
   policy.cuda()
   policy.eval()
   print(f'Loaded: {ckpt_path}')
+
+  return policy
   
 def get_image(image_list: list):
     """
@@ -141,38 +143,33 @@ def model_inference(args, policy):
   query_frequency = args['chunk_size']
   temporal_agg = args['temporal_agg']
   task_name = args['task_name']
-  state_dim = TASK_CONFIGS[task_name]["state_dim"]
 
   # load hdf5 dataset
-  dataset_path = os.path.join(TASK_CONFIGS[task_name]["dataset_dir"], "episode_0.hdf5")
-  joint_position, image_dict, action = load_hdf5(dataset_path)
+  dataset_path = os.path.join(TASK_CONFIGS[task_name]["dataset_dir"], "episode_10.hdf5")
+  joint_position, image_dict, ground_truth_action = load_hdf5(dataset_path)
   max_timesteps = len(joint_position)
+  print(f"dataset timesteps: {max_timesteps}")
   
   if temporal_agg:
       # 如果使用时间聚合，则每步查询一次
       query_frequency = 1
       # 保存原始的查询数量
       num_queries = args['chunk_size']
-      # 保存历史的动作序列
-      # TODO: 是否可以改为队列？
-      # max_timesteps = 10000
-      # all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, state_dim]).cuda()
 
       # 使用双端队列来存储历史预测的动作序列
       # maxlen 参数自动管理队列大小，当队列满时，最老的元素会被自动移除
       action_queue = deque(maxlen=num_queries) # maxlen 设置为预测序列的长度
       
   input("Press [Enter] key to start eval dataset):")
-  # TODO: robot go to init position
-  print("wait robot to init pose")
   
   t = 0
-  action_list = []
+  ground_truth_actions = []
+  predicted_actions = []
+  rospy.init_node("eval_dataset")
   rate = rospy.Rate(args['control_rate'])
   with torch.inference_mode():
-    while t <= max_timesteps:
+    while t < max_timesteps:
         start_time = time.time()
-        # observation = 
         
         ### process qpos and image_list
         qpos = pre_process(joint_position[t])
@@ -187,32 +184,15 @@ def model_inference(args, policy):
         if args['policy_class'] == "ACT":
             # query_frequency间隔推理一次输出 动作快
             if t % query_frequency == 0:
+                time1 = time.time()
                 all_actions = policy(qpos, curr_image)
+                print(f"policy time: {(time.time() - time1) * 1000}")
                 # 将本次推理得到的整个动作序列（或其张量）加入队列
                 # 这里可以选择只存 CPU 张量以节省 GPU 内存，使用时再 .cuda()
-                action_queue.append(all_actions.cpu()) 
+                if temporal_agg:
+                  action_queue.append(all_actions.cpu()) 
             
             if temporal_agg:
-                # # 将预测的动作序列存储到all_time_actions中
-                # all_time_actions[[t], t:t+num_queries] = all_actions
-                # # 获取当前时间步之前的所有预测动作
-                # actions_for_curr_step = all_time_actions[:, t]
-                # # 找出已经填充了动作的时间步
-                # actions_populated = torch.all(actions_for_curr_step != 0, axis=1)  # shape: (max_timesteps,)
-                # actions_for_curr_step = actions_for_curr_step[actions_populated]  # shape: (num_populated, 14)
-                
-                # # 计算指数衰减权重
-                # # w_i = exp(-k * i) / sum(exp(-k * i))
-                # # 这里的i是时间步索引，k是衰减率
-                # k = 0.01  # 衰减率
-                # exp_weights = np.exp(-k * np.arange(len(actions_for_curr_step)))
-                # exp_weights = exp_weights / exp_weights.sum()  # 归一化权重
-                # exp_weights = torch.from_numpy(exp_weights).cuda().unsqueeze(dim=1) # shape: (num_populated, 1)
-                
-                # # 使用加权平均计算最终动作
-                # raw_action = (actions_for_curr_step * exp_weights).sum(dim=0, keepdim=True) # shape: (1, 14)
-
-            
                 # 从队列中收集所有历史预测
                 # 队列中的每个元素都是一个完整的预测序列 (num_queries, action_dim)
                 actions_for_curr_step = []
@@ -252,17 +232,59 @@ def model_inference(args, policy):
         ### post-process actions
         raw_action = raw_action.squeeze(0).cpu().numpy()
         action = post_process(raw_action)
-        target_qpos = action
-
-        ### step the environment
-        env.step(target_qpos)
-        t += 1
-
+        
+        ground_truth_actions.append(ground_truth_action[t])
+        predicted_actions.append(action)
+        
         # 计算耗时
         end_time = time.time()
         print(f"inference time: {(end_time - start_time)*1000} ms")
         
+        t += 1
         rate.sleep()
+        
+  ground_truth_actions = np.array(ground_truth_actions)
+  predicted_actions = np.array(predicted_actions)
+  
+  # 1. MSE 和 RMSE
+  mse = mean_squared_error(ground_truth_actions, predicted_actions)
+  rmse = np.sqrt(mse)
+
+  # 2. MAE
+  mae = mean_absolute_error(ground_truth_actions, predicted_actions)
+
+  # 3. r2 决定系数（multioutput='uniform_average' 表示所有维度平均）
+  r2 = r2_score(ground_truth_actions, predicted_actions, multioutput='uniform_average')
+
+  print(f"MSE:  {mse:.6f}")
+  print(f"RMSE: {rmse:.6f}")
+  print(f"MAE:  {mae:.6f}")
+  print(f"R²:   {r2:.6f}")
+
+  # Get the number of timesteps and action dimensions
+  n_timesteps, n_dims = ground_truth_actions.shape
+
+  # Create a figure with subplots for each action dimension
+  fig, axes = plt.subplots(n_dims, 1, figsize=(12, 4*n_dims), sharex=True)
+  fig.suptitle('Ground Truth vs Predicted Actions')
+
+  # Plot each dimension
+  for i in range(n_dims):
+      ax = axes[i] if n_dims > 1 else axes
+
+      ax.plot(ground_truth_actions[:, i], label='Ground Truth', color='blue')
+      ax.plot(predicted_actions[:, i], label='Predicted', color='red', linestyle='--')
+      ax.set_ylabel(f'Dim {i+1}')
+      ax.legend()
+
+  # Set common x-label
+  axes[-1].set_xlabel('Timestep')
+
+  plt.tight_layout()
+  # plt.show()
+
+  time.sleep(1)
+  plt.savefig('figure.png')
 
 def init_arguments():
   parser = argparse.ArgumentParser()
@@ -288,7 +310,7 @@ def init_arguments():
   parser.add_argument('--nheads', action='store', type=int, help='nheads', default=8, required=False)
   parser.add_argument('--backbone', action='store', type=str, help='backbone', default='resnet18', required=False)
   # 时序聚合 
-  parser.add_argument('--temporal_agg',  action='store', type=bool, help='temporal_agg', default=True, required=False)
+  parser.add_argument('--temporal_agg', action='store_true')
   
   args = vars(parser.parse_args())
   print(f"args: {args}")
@@ -300,7 +322,5 @@ if __name__ == '__main__':
   args = init_arguments()
   # 2. load trained model
   policy = load_model(args)
-  # 3. make real robot environment
-  # env = RealRobotEnv(args)
-  # 4. inference
-  model_inference(args, policy, env)
+  # 3. inference
+  model_inference(args, policy)

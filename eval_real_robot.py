@@ -119,7 +119,7 @@ def model_inference(args, policy, env: RealRobotEnv):
   query_frequency = args['chunk_size']
   temporal_agg = args['temporal_agg']
   task_name = args['task_name']
-  state_dim = state_dim = TASK_CONFIGS[task_name]["state_dim"]
+  state_dim = TASK_CONFIGS[task_name]["state_dim"]
   
   if temporal_agg:
       # 如果使用时间聚合，则每步查询一次
@@ -160,11 +160,13 @@ def model_inference(args, policy, env: RealRobotEnv):
         if args['policy_class'] == "ACT":
             # query_frequency间隔推理一次输出 动作快
             if t % query_frequency == 0:
+                time1 = time.time()
                 all_actions = policy(qpos, curr_image)
+                print(f"policy time: {(time.time() - time1) * 1000}")
                 # 将本次推理得到的整个动作序列（或其张量）加入队列
                 # 这里可以选择只存 CPU 张量以节省 GPU 内存，使用时再 .cuda()
-                action_queue.append(all_actions.cpu())
-                print(f"all_actions.shape: {all_actions.shape}")
+                if temporal_agg:
+                    action_queue.append(all_actions.cpu())
             
             if temporal_agg:
                 # 从队列中收集所有历史预测
@@ -196,7 +198,6 @@ def model_inference(args, policy, env: RealRobotEnv):
 
             else:
                 # 如果不使用时间聚合，直接选择当前时间步对应的动作
-                print(f"all_actions.shape: {all_actions.shape}")
                 raw_action = all_actions[:, t % query_frequency]
         elif args['policy_class'] == "CNNMLP":
             raw_action = policy(qpos, curr_image)
@@ -243,7 +244,7 @@ def init_arguments():
   parser.add_argument('--nheads', action='store', type=int, help='nheads', default=8, required=False)
   parser.add_argument('--backbone', action='store', type=str, help='backbone', default='resnet18', required=False)
   # 时序聚合 
-  parser.add_argument('--temporal_agg',  action='store', type=bool, help='temporal_agg', default=True, required=False)
+  parser.add_argument('--temporal_agg', action='store_true')
   
   args = vars(parser.parse_args())
   print(f"args: {args}")

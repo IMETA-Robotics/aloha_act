@@ -11,4 +11,5 @@ python3 eval_real_robot.py \
     --policy_class ACT \
     --chunk_size 25 \
     --control_rate 20 \
-    --seed 0
+    --seed 0 \
+    --temporal_agg

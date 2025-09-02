@@ -1,5 +1,5 @@
 ### Task parameters
-DATA_DIR = "/home/zxf/IMETA_LAB/data_collection/data"
+DATA_DIR = "/home/ubuntu/IMETA_LAB/data_collection/data"
 TASK_CONFIGS = {
     'piper_pick_and_place':{
         'dataset_dir': DATA_DIR + '/piper_place_and_place_0729',
