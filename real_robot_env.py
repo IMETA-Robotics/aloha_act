@@ -1,5 +1,5 @@
-from imeta_y1_msg.msg import ArmJointState
-from imeta_y1_msg.msg import ArmJointPositionControl
+from y1_msg.msg import ArmJointState
+from y1_msg.msg import ArmJointPositionControl
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
 import rospy

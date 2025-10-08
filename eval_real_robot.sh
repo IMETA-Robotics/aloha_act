@@ -7,9 +7,9 @@ export CUDA_VISIBLE_DEVICES=${gpu_id}
 python3 eval_real_robot.py \
     --task_name ${task_name} \
     --ckpt_dir output/act_ckpt/act-${task_name}/ \
-    --ckpt_name policy_epoch_8000_seed_0.ckpt \
+    --ckpt_name policy_best.ckpt \
     --policy_class ACT \
     --chunk_size 25 \
-    --control_rate 20 \
+    --control_rate 25 \
     --seed 0 \
     --temporal_agg

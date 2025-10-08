@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 train your act model.
 
@@ -54,7 +55,6 @@ def main(args):
     task_config = TASK_CONFIGS[task_name]
     dataset_dir = task_config['dataset_dir']
     num_episodes = task_config['num_episodes']
-    episode_len = task_config['episode_len']
     camera_names = task_config['camera_names']
     state_dim = task_config["state_dim"]
     if policy_class == 'ACT':
@@ -82,7 +82,6 @@ def main(args):
     config = {
         'num_epochs': num_epochs,
         'ckpt_dir': ckpt_dir,
-        'episode_len': episode_len,
         'state_dim': state_dim,
         'lr': args['lr'],
         'policy_class': policy_class,
@@ -308,7 +307,7 @@ if __name__ == '__main__':
     parser.add_argument('--chunk_size', action='store', type=int, help='chunk_size', required=False)
     # transformer的encoder输入维度
     parser.add_argument('--hidden_dim', action='store', type=int, help='hidden_dim', required=False)
-    # transformer 前馈网络FFN的维度get_image
+    # transformer 前馈网络FFN的维度
     parser.add_argument('--dim_feedforward', action='store', type=int, help='dim_feedforward', required=False)
     parser.add_argument('--enc_layers', action='store', type=int, help='enc_layers', default=4, required=False)
     parser.add_argument('--dec_layers', action='store', type=int, help='dec_layers', default=7, required=False)
