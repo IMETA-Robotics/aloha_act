@@ -134,7 +134,7 @@ def model_inference(args, policy, env: RealRobotEnv):
   input("Press key [enter] to start model inference: ")
   # TODO: robot go to dataset init position
   print("wait robot to init pose")
-  init_position = [1.5, 0, 0, 0, 0, 0, 0]
+  init_position = [0, 0, 0, 0, 0, 0, 0]
   env.step(init_position)
   time.sleep(3)
   
@@ -155,6 +155,7 @@ def model_inference(args, policy, env: RealRobotEnv):
         qpos = torch.from_numpy(qpos).float().cuda().unsqueeze(0)
         
         curr_image = get_image(observation["images"]) # shape: (1, num_cameras, C, H, W)
+        print(f"pre_process_time : {(time.time() - start_time) * 1000}")
 
         ### query policy
         if args['policy_class'] == "ACT":

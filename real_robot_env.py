@@ -28,23 +28,23 @@ class RealRobotEnv:
     state_dim = self.task_config['state_dim']
     if state_dim == 7:
       # one arm, default right arm
-      rospy.Subscriber("/y1/arm_joint_state",
+      rospy.Subscriber("/puppet_arm_right/joint_states",
           ArmJointState, self.puppet_arm_right_callback, queue_size=1, tcp_nodelay=True)
       # control right arm
-      self.right_arm_joint_position_control_pub_ = rospy.Publisher('/y1/arm_joint_position_control', 
+      self.right_arm_joint_position_control_pub_ = rospy.Publisher('/master_arm_right/joint_states', 
                                                                    ArmJointPositionControl, queue_size=1)
       
     elif state_dim == 14:
       # two arm
-      rospy.Subscriber("/arm_joint_state",
+      rospy.Subscriber("/puppet_arm_right/joint_states",
             ArmJointState, self.puppet_arm_right_callback, queue_size=1, tcp_nodelay=True)
       rospy.Subscriber("/puppet_arm_left/joint_states",
             ArmJointState, self.puppet_arm_left_callback, queue_size=1, tcp_nodelay=True)
       
       # control left and right arm
-      self.left_arm_joint_position_control_pub_ = rospy.Publisher('/puppet_arm_left/joint_states', 
+      self.left_arm_joint_position_control_pub_ = rospy.Publisher('/master_arm_left/joint_states', 
                                                                   ArmJointPositionControl, queue_size=1)
-      self.right_arm_joint_position_control_pub_ = rospy.Publisher('/puppet_arm_right/joint_states', 
+      self.right_arm_joint_position_control_pub_ = rospy.Publisher('/master_arm_right/joint_states', 
                                                                    ArmJointPositionControl, queue_size=1)    
     else:
       raise Exception(f"state dim {state_dim} not support, only support 7 or 14")
@@ -123,7 +123,7 @@ class RealRobotEnv:
   def step(self, action: Union[list, np.ndarray, torch.Tensor]):
     joint_control_msg = ArmJointPositionControl()
     joint_control_msg.header.stamp = rospy.Time.now()
-    joint_control_msg.arm_joint_position = action[0:6]
-    joint_control_msg.gripper = action[6]
+    joint_control_msg.joint_position = action[0:6]
+    joint_control_msg.gripper_stroke = action[6]
     
     self.right_arm_joint_position_control_pub_.publish(joint_control_msg)

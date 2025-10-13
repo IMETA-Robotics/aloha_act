@@ -11,7 +11,6 @@ import os
 import torch
 import pickle
 import time
-import rospy
 import numpy as np
 from einops import rearrange
 from collections import deque
@@ -165,8 +164,7 @@ def model_inference(args, policy):
   t = 0
   ground_truth_actions = []
   predicted_actions = []
-  rospy.init_node("eval_dataset")
-  rate = rospy.Rate(args['control_rate'])
+
   with torch.inference_mode():
     while t < max_timesteps:
         start_time = time.time()
@@ -218,7 +216,7 @@ def model_inference(args, policy):
                     # 队列为空的边缘情况，通常不会发生
                     # raw_action = torch.zeros(1, state_dim).cuda()
                     print("action_queue is empty")
-                    rate.sleep()
+                    time.sleep(0.01)
                     continue
 
             else:
@@ -241,7 +239,7 @@ def model_inference(args, policy):
         print(f"inference time: {(end_time - start_time)*1000} ms")
         
         t += 1
-        rate.sleep()
+        time.sleep(0.01)
         
   ground_truth_actions = np.array(ground_truth_actions)
   predicted_actions = np.array(predicted_actions)
