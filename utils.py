@@ -218,7 +218,7 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
     print(f'\nData from: {dataset_dir}\n')
     
     # 训练集和验证集划分
-    train_ratio = 0.8
+    train_ratio = 0.9
     # numpy.random.permutation 函数随机打乱索引顺序
     shuffled_indices = np.random.permutation(num_episodes)
     train_indices = shuffled_indices[:int(train_ratio * num_episodes)]

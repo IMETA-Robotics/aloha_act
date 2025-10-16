@@ -134,8 +134,8 @@ def model_inference(args, policy, env: RealRobotEnv):
   input("Press key [enter] to start model inference: ")
   # TODO: robot go to dataset init position
   print("wait robot to init pose")
-  init_position = [0, 0, 0, 0, 0, 0, 0]
-  env.step(init_position)
+#   init_position = [0, 0, 0, 0, 0, 0, 0]
+#   env.step(init_position)
   time.sleep(3)
   
   t = 0
@@ -163,6 +163,7 @@ def model_inference(args, policy, env: RealRobotEnv):
             if t % query_frequency == 0:
                 time1 = time.time()
                 all_actions = policy(qpos, curr_image)
+
                 print(f"policy time: {(time.time() - time1) * 1000}")
                 # 将本次推理得到的整个动作序列（或其张量）加入队列
                 # 这里可以选择只存 CPU 张量以节省 GPU 内存，使用时再 .cuda()

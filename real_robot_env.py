@@ -97,16 +97,32 @@ class RealRobotEnv:
     
   def get_observation(self):
     observation = {}
+
     # state
-    if self.right_puppet_arm_state is None:
-      print("not receive right arm data")
-      return None
-    else:
-      joint_state = np.array(self.right_puppet_arm_state.joint_position)
-      observation["state"] = joint_state
-      # observation["state"] = torch.from_numpy(joint_state).float()
+    state_dim = self.task_config['state_dim']
+    if state_dim == 7:
+      # single arm
+      if self.right_puppet_arm_state is None:
+        print("not receive right arm data")
+        return None
+      else:
+        joint_state = np.array(self.right_puppet_arm_state.joint_position)
+        observation["state"] = joint_state
+    elif state_dim == 14:
+      # double arm
+      if self.right_puppet_arm_state is None:
+        print("not receive right arm data")
+        return None
+
+      if self.left_puppet_arm_state is None:
+        print("not receive left arm data")
+        return None
       
-    # TODO: add left arm joint state
+      observation["state"] = np.concatenate([self.right_puppet_arm_state.joint_position,
+                                 self.left_puppet_arm_state.joint_position])
+      
+    else:
+      raise Exception(f"state dim {state_dim} not support, only support 7 or 14")
     
     # image
     image_list = []
@@ -127,3 +143,9 @@ class RealRobotEnv:
     joint_control_msg.gripper_stroke = action[6]
     
     self.right_arm_joint_position_control_pub_.publish(joint_control_msg)
+
+    if self.task_config['state_dim'] == 14:
+      joint_control_msg.joint_position = action[7:13]
+      joint_control_msg.gripper_stroke = action[13]
+    
+    self.left_arm_joint_position_control_pub_.publish(joint_control_msg)
