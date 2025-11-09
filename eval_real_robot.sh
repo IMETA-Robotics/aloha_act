@@ -1,5 +1,5 @@
 #!/bin/bash
-task_name="pick_and_place_1009"
+task_name="folded_orange_towel"
 gpu_id=0
 
 export CUDA_VISIBLE_DEVICES=${gpu_id}

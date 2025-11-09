@@ -1,5 +1,5 @@
 #!/bin/bash
-task_name="pick_and_place_1009"
+task_name="folded_orange_towel"
 gpu_id=0
 
 export CUDA_VISIBLE_DEVICES=${gpu_id}
@@ -11,8 +11,8 @@ python3 train.py \
     --kl_weight 10 \
     --chunk_size 30 \
     --hidden_dim 512 \
-    --batch_size 32 \
+    --batch_size 16 \
     --dim_feedforward 3200 \
     --num_epochs 10000 \
-    --lr 4e-5 \
+    --lr 2e-5 \
     --seed 0

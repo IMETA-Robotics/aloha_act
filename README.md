@@ -39,6 +39,17 @@
   cd detr && pip install -e .
   ```
 
+  ### 50 series GPU
+  ```sh
+  conda create -n aloha python=3.9
+  conda activate aloha
+  pip install -r requirements_50.txt
+  pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+  pip install "numpy<2"
+
+  cd detr && pip install -e .
+  ```
+
 # 2.tranning
   ```sh
   bash train.sh
@@ -66,3 +77,17 @@ if you use c++ sdk:
   ```sh
   bash eval_real_robot.sh
   ```
+
+  ### 50 series GPU
+  ```sh
+    export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libffi.so.7
+    bash eval_real_robot.sh
+    ```
+
+# QA
+1. Q:在下载resnet18模型的时候显示100%, 但会一直卡在这里？
+
+  A: 提前下载好resnet18模型
+  """sh
+  wget https://download.pytorch.org/models/resnet18-f37072fd.pth -O ~/.cache/torch/hub/checkpoints/resnet18-f37072fd.pth
+  """
