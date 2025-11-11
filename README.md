@@ -1,7 +1,7 @@
 # Software Dependency
 
-- Ubuntu 20.04 LTS
-- ROS Noetic
+- Ubuntu 22.04 LTS
+- ROS Humble
 
 # ACT: Action Chunking with Transformers
 
@@ -32,16 +32,17 @@
 
 ## 1.2 Create conda environment:
   ```sh
-  conda create -n aloha python=3.8.10
+  conda create -n aloha python=3.10
   conda activate aloha
   pip install -r requirements.txt
+  pip install "numpy<2"
 
   cd detr && pip install -e .
   ```
 
   ### 50 series GPU
   ```sh
-  conda create -n aloha python=3.9
+  conda create -n aloha python=3.10
   conda activate aloha
   pip install -r requirements_50.txt
   pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128

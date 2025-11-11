@@ -2,50 +2,76 @@ from y1_msg.msg import ArmJointState
 from y1_msg.msg import ArmJointPositionControl
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
-import rospy
+# import rospy
 import numpy as np
 import torch
 from typing import Union
+import rclpy
+from rclpy.node import Node
 from task_config import TASK_CONFIGS
 
-class RealRobotEnv:
+class RealRobotEnv(Node):
   def __init__(self, args):
-    self.task_config = TASK_CONFIGS[args['task_name']]
+    # 确保rclpy已初始化
+    if not rclpy.ok():
+      rclpy.init()
     
+    super().__init__('aloha_act_node')
+    self.task_config = TASK_CONFIGS[args['task_name']]
     self.bridge = CvBridge()
     self.right_puppet_arm_state = None
     self.left_puppet_arm_state = None
     self.img_dict = {}
     self.left_arm_joint_position_control_pub_ = None
     self.right_arm_joint_position_control_pub_ = None
-    self.init_topic()
+    # 初始化订阅
+    self.init_subscriptions()
+
+  def destroy(self):
+    self.destroy_node()
+    rclpy.shutdown()
     
-  def init_topic(self):
-    rospy.init_node("eval_real_robot")
-    
+  def init_subscriptions(self):
     # subscribe
     # robotic arm data
     state_dim = self.task_config['state_dim']
     if state_dim == 7:
       # one arm, default right arm
-      rospy.Subscriber("/puppet_arm_right/joint_states",
-          ArmJointState, self.puppet_arm_right_callback, queue_size=1, tcp_nodelay=True)
+      self.create_subscription(
+            ArmJointState,
+            "/puppet_arm_right/joint_states",
+            self.puppet_arm_right_callback,
+            1)
+      
       # control right arm
-      self.right_arm_joint_position_control_pub_ = rospy.Publisher('/master_arm_right/joint_states', 
-                                                                   ArmJointPositionControl, queue_size=1)
+      self.right_arm_joint_position_control_pub_ = self.create_publisher(
+            ArmJointPositionControl,
+            '/master_arm_right/joint_states',
+            1)
       
     elif state_dim == 14:
       # two arm
-      rospy.Subscriber("/puppet_arm_right/joint_states",
-            ArmJointState, self.puppet_arm_right_callback, queue_size=1, tcp_nodelay=True)
-      rospy.Subscriber("/puppet_arm_left/joint_states",
-            ArmJointState, self.puppet_arm_left_callback, queue_size=1, tcp_nodelay=True)
+      self.create_subscription(
+            ArmJointState,
+            "/puppet_arm_right/joint_states",
+            self.puppet_arm_right_callback,
+            1)
+      
+      self.create_subscription(
+          ArmJointState,
+          "/puppet_arm_left/joint_states",
+          self.puppet_arm_left_callback,
+          1)
       
       # control left and right arm
-      self.left_arm_joint_position_control_pub_ = rospy.Publisher('/master_arm_left/joint_states', 
-                                                                  ArmJointPositionControl, queue_size=1)
-      self.right_arm_joint_position_control_pub_ = rospy.Publisher('/master_arm_right/joint_states', 
-                                                                   ArmJointPositionControl, queue_size=1)    
+      self.left_arm_joint_position_control_pub_ = self.create_publisher(
+          ArmJointPositionControl,
+          '/master_arm_left/joint_states',
+          1)
+      self.right_arm_joint_position_control_pub_ = self.create_publisher(
+          ArmJointPositionControl,
+          '/master_arm_right/joint_states',
+          1)   
     else:
       raise Exception(f"state dim {state_dim} not support, only support 7 or 14")
   
@@ -54,20 +80,20 @@ class RealRobotEnv:
     for cam_name in camera_names:
       if cam_name == "cam_right_wrist":
         # right arm wrist camera rgb image
-        rospy.Subscriber("/camera_right/color/image_raw", 
-          Image, self.img_right_callback, queue_size=1, tcp_nodelay=True)
+        self.create_subscription(
+            Image, "/camera_right/color/image_raw", self.img_right_callback, 1)
       elif cam_name == "cam_left_wrist":
         # left arm wrist camera rgb image
-        rospy.Subscriber("/camera_left/color/image_raw", 
-          Image, self.img_left_callback, queue_size=1, tcp_nodelay=True)
+        self.create_subscription(
+            Image, "/camera_left/color/image_raw", self.img_left_callback, 1)
       elif cam_name == "cam_front":
         # front camera rgb image
-        rospy.Subscriber("/camera_front/color/image_raw", 
-          Image, self.img_front_callback, queue_size=1, tcp_nodelay=True)
+        self.create_subscription(
+            Image, "/camera_front/color/image_raw", self.img_front_callback, 1)
       elif cam_name == "cam_top":
         # top camera rgb image
-        rospy.Subscriber("/camera_top/color/image_raw", 
-          Image, self.img_top_callback, queue_size=1, tcp_nodelay=True)
+        self.create_subscription(
+            Image, "/camera_top/color/image_raw", self.img_top_callback, 1)
       else:
         raise Exception(f"camera name {cam_name} not found")
 
@@ -138,7 +164,7 @@ class RealRobotEnv:
     
   def step(self, action: Union[list, np.ndarray, torch.Tensor]):
     joint_control_msg = ArmJointPositionControl()
-    joint_control_msg.header.stamp = rospy.Time.now()
+    joint_control_msg.header.stamp = self.get_clock().now().to_msg()
     joint_control_msg.joint_position = action[0:6]
     joint_control_msg.gripper_stroke = action[6]
     

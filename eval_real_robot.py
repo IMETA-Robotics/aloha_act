@@ -18,7 +18,8 @@ import os
 import torch
 import pickle
 import time
-import rospy
+# import rospy
+import rclpy
 import numpy as np
 from einops import rearrange
 from collections import deque
@@ -134,20 +135,25 @@ def model_inference(args, policy, env: RealRobotEnv):
   input("Press key [enter] to start model inference: ")
   # TODO: robot go to dataset init position
   print("wait robot to init pose")
-#   init_position = [0, 0, 0, 0, 0, 0, 0]
-#   env.step(init_position)
+  # init_position = [0, 0, 0, 0, 0, 0, 0]
+  # env.step(init_position)
   time.sleep(3)
   
   t = 0
-  rate = rospy.Rate(args['control_rate'])
+  target_period = 1.0 / args['control_rate']
+
   with torch.inference_mode():
-    while not rospy.is_shutdown():
+    while rclpy.ok():
         start_time = time.time()
+        rclpy.spin_once(env, timeout_sec=0.02)
+        
         observation = env.get_observation()
         
         # wait input data
         if observation is None:
-            rate.sleep()
+            elapsed = time.time() - start_time
+            sleep_time = target_period - elapsed
+            time.sleep(sleep_time)
             continue
         
         ### process qpos and image_list
@@ -195,7 +201,7 @@ def model_inference(args, policy, env: RealRobotEnv):
                 else:
                     # 队列为空的边缘情况，通常不会发生
                     print("action_queue is empty")
-                    rate.sleep()
+                    # rate.sleep()
                     continue
 
             else:
@@ -217,7 +223,10 @@ def model_inference(args, policy, env: RealRobotEnv):
         if inference_time > 50 :
             print(f"delay inference time: {inference_time} ms")
         
-        rate.sleep()
+        elapsed = time.time() - start_time
+        sleep_time = target_period - elapsed
+        if sleep_time > 0:
+            time.sleep(sleep_time)
         ### step the environment
         env.step(target_qpos)
         t += 1
