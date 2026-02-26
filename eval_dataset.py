@@ -144,7 +144,7 @@ def model_inference(args, policy):
   task_name = args['task_name']
 
   # load hdf5 dataset
-  dataset_path = os.path.join(TASK_CONFIGS[task_name]["dataset_dir"], "episode_10.hdf5")
+  dataset_path = os.path.join(TASK_CONFIGS[task_name]["dataset_dir"], "episode_2.hdf5")
   joint_position, image_dict, ground_truth_action = load_hdf5(dataset_path)
   max_timesteps = len(joint_position)
   print(f"dataset timesteps: {max_timesteps}")
@@ -282,7 +282,7 @@ def model_inference(args, policy):
   # plt.show()
 
   time.sleep(1)
-  plt.savefig('figure.png')
+  plt.savefig('without_temporal_agg_episode_2.png')
 
 def init_arguments():
   parser = argparse.ArgumentParser()

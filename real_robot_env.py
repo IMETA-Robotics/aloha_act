@@ -60,14 +60,14 @@ class RealRobotEnv:
         # left arm wrist camera rgb image
         rospy.Subscriber("/camera_left/color/image_raw", 
           Image, self.img_left_callback, queue_size=1, tcp_nodelay=True)
-      elif cam_name == "cam_front":
+      elif cam_name == "cam_high":
         # front camera rgb image
-        rospy.Subscriber("/camera_front/color/image_raw", 
-          Image, self.img_front_callback, queue_size=1, tcp_nodelay=True)
-      elif cam_name == "cam_top":
+        rospy.Subscriber("/camera_high/color/image_raw", 
+          Image, self.img_high_callback, queue_size=1, tcp_nodelay=True)
+      elif cam_name == "cam_low":
         # top camera rgb image
-        rospy.Subscriber("/camera_top/color/image_raw", 
-          Image, self.img_top_callback, queue_size=1, tcp_nodelay=True)
+        rospy.Subscriber("/camera_low/color/image_raw", 
+          Image, self.img_low_callback, queue_size=1, tcp_nodelay=True)
       else:
         raise Exception(f"camera name {cam_name} not found")
 
@@ -87,13 +87,13 @@ class RealRobotEnv:
     """left arm wrist camera rgb image"""
     self.img_dict["cam_left_wrist"] = self.bridge.imgmsg_to_cv2(msg, desired_encoding='rgb8')
     
-  def img_front_callback(self, msg: Image):
-    """front camera rgb image"""
-    self.img_dict["cam_front"] = self.bridge.imgmsg_to_cv2(msg, desired_encoding='rgb8')
+  def img_high_callback(self, msg: Image):
+    """high camera rgb image"""
+    self.img_dict["cam_high"] = self.bridge.imgmsg_to_cv2(msg, desired_encoding='rgb8')
     
-  def img_top_callback(self, msg: Image):
+  def img_low_callback(self, msg: Image):
     """top camera rgb image"""
-    self.img_dict["cam_top"] = self.bridge.imgmsg_to_cv2(msg, desired_encoding='rgb8')
+    self.img_dict["cam_low"] = self.bridge.imgmsg_to_cv2(msg, desired_encoding='rgb8')
     
   def get_observation(self):
     observation = {}
@@ -110,16 +110,16 @@ class RealRobotEnv:
         observation["state"] = joint_state
     elif state_dim == 14:
       # double arm
-      if self.right_puppet_arm_state is None:
-        print("not receive right arm data")
-        return None
-
       if self.left_puppet_arm_state is None:
         print("not receive left arm data")
         return None
+  
+      if self.right_puppet_arm_state is None:
+        print("not receive right arm data")
+        return None
       
-      observation["state"] = np.concatenate([self.right_puppet_arm_state.joint_position,
-                                 self.left_puppet_arm_state.joint_position])
+      observation["state"] = np.concatenate([self.left_puppet_arm_state.joint_position,
+                                 self.right_puppet_arm_state.joint_position])
       
     else:
       raise Exception(f"state dim {state_dim} not support, only support 7 or 14")
@@ -127,7 +127,7 @@ class RealRobotEnv:
     # image
     image_list = []
     for cam_name in self.task_config['camera_names']:
-      if cam_name not in  self.img_dict:
+      if cam_name not in self.img_dict:
         print(f"not receive {cam_name} image data")
         return None
       image_list.append(self.img_dict[cam_name])
@@ -137,15 +137,33 @@ class RealRobotEnv:
     return observation
     
   def step(self, action: Union[list, np.ndarray, torch.Tensor]):
-    joint_control_msg = ArmJointPositionControl()
-    joint_control_msg.header.stamp = rospy.Time.now()
-    joint_control_msg.joint_position = action[0:6]
-    joint_control_msg.gripper_stroke = action[6]
+    if self.task_config['state_dim'] == 7:
+        # single arm, default right arm
+        joint_control_msg = ArmJointPositionControl()
+        joint_control_msg.header.stamp = rospy.Time.now()
+        joint_control_msg.joint_position = action[0:6]
+        joint_control_msg.joint_velocity = 3
+        joint_control_msg.gripper_stroke = action[6]
+        joint_control_msg.gripper_velocity = 3
+        self.right_arm_joint_position_control_pub_.publish(joint_control_msg)
     
-    self.right_arm_joint_position_control_pub_.publish(joint_control_msg)
+    elif self.task_config['state_dim'] == 14:
+        # action[0:6]  -> left arm control
+        left_arm_control_msg = ArmJointPositionControl()
+        left_arm_control_msg.header.stamp = rospy.Time.now()
+        left_arm_control_msg.joint_position = action[0:6]
+        left_arm_control_msg.joint_velocity = 5
+        left_arm_control_msg.gripper_stroke = action[6]
+        left_arm_control_msg.gripper_velocity = 5
+        self.left_arm_joint_position_control_pub_.publish(left_arm_control_msg)
 
-    if self.task_config['state_dim'] == 14:
-      joint_control_msg.joint_position = action[7:13]
-      joint_control_msg.gripper_stroke = action[13]
-    
-    self.left_arm_joint_position_control_pub_.publish(joint_control_msg)
+        # action[7:13] -> right arm control
+        right_arm_control_msg = ArmJointPositionControl()
+        right_arm_control_msg.header.stamp = rospy.Time.now()
+        right_arm_control_msg.joint_position = action[7:13]
+        right_arm_control_msg.joint_velocity = 5
+        right_arm_control_msg.gripper_stroke = action[13]
+        right_arm_control_msg.gripper_velocity = 5
+        self.right_arm_joint_position_control_pub_.publish(right_arm_control_msg)
+    else:
+      raise Exception(f"state dim {self.task_config['state_dim']} not support, only support 7 or 14")
